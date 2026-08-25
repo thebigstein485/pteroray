@@ -1,9 +1,10 @@
 # Gebruik het officiële Pterodactyl Debian yolk als basis
 FROM ghcr.io/pterodactyl/yolks:debian
 
-# Installeer unzip (voor Xray zip) en ca-certificates
+# Installeer unzip, curl (voor Xray download) en ca-certificates
 RUN apt-get update && apt-get install -y --no-install-recommends \
     unzip \
+    curl \
     ca-certificates \
   && rm -rf /var/lib/apt/lists/*
 
