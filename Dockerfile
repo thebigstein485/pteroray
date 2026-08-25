@@ -1,33 +1,73 @@
-# Pterodactyl Debian yolk
-FROM ghcr.io/pterodactyl/yolks:debian
+FROM debian:bookworm-slim
+
+LABEL org.opencontainers.image.title="pteroray"
+LABEL org.opencontainers.image.description="Xray container for Pterodactyl"
+LABEL org.opencontainers.image.source="https://github.com/thebigstein485/pteroray"
 
 USER root
 
-# Pakketten installeren
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    unzip \
-    curl \
-    ca-certificates \
-  && rm -rf /var/lib/apt/lists/*
+ENV DEBIAN_FRONTEND=noninteractive
+ENV USER=container
+ENV HOME=/home/container
 
-# Xray installeren
+# ---------------------------------------------------------
+# Install required packages
+# ---------------------------------------------------------
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        bash \
+        ca-certificates \
+        curl \
+        unzip \
+    && rm -rf /var/lib/apt/lists/*
+
+# ---------------------------------------------------------
+# Create Pterodactyl container user
+# ---------------------------------------------------------
+RUN useradd \
+        --create-home \
+        --home-dir /home/container \
+        --shell /bin/bash \
+        --uid 1000 \
+        container \
+    && mkdir -p /home/container \
+    && chown -R container:container /home/container
+
+# ---------------------------------------------------------
+# Install Xray
+# ---------------------------------------------------------
+ARG XRAY_VERSION=26.7.28
+
 RUN set -eux; \
-    ARCH="$(uname -m)"; \
-    if [ "$ARCH" = "x86_64" ]; then \
-        XRAY_ARCH="64"; \
-    elif [ "$ARCH" = "aarch64" ]; then \
-        XRAY_ARCH="arm64-v8a"; \
-    else \
-        echo "Niet-ondersteunde architectuur: $ARCH"; \
-        exit 1; \
-    fi; \
-    curl -fL "https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-${XRAY_ARCH}.zip" \
+    ARCH="$(dpkg --print-architecture)"; \
+    case "$ARCH" in \
+        amd64) XRAY_ARCH="64" ;; \
+        arm64) XRAY_ARCH="arm64-v8a" ;; \
+        *) \
+            echo "Unsupported architecture: $ARCH"; \
+            exit 1 ;; \
+    esac; \
+    curl -fL --retry 3 \
+        "https://github.com/XTLS/Xray-core/releases/download/v${XRAY_VERSION}/Xray-linux-${XRAY_ARCH}.zip" \
         -o /tmp/xray.zip; \
-    unzip -o /tmp/xray.zip -d /tmp/xray; \
+    mkdir -p /tmp/xray; \
+    unzip -q /tmp/xray.zip -d /tmp/xray; \
     install -m 0755 /tmp/xray/xray /usr/local/bin/xray; \
     rm -rf /tmp/xray /tmp/xray.zip
 
+# ---------------------------------------------------------
+# Verify Xray installation
+# ---------------------------------------------------------
+RUN /usr/local/bin/xray version
+
+# ---------------------------------------------------------
+# Pterodactyl working directory
+# ---------------------------------------------------------
+WORKDIR /home/container
+
+# ---------------------------------------------------------
+# Run as Pterodactyl's unprivileged user
+# ---------------------------------------------------------
 USER container
 
-ENV USER=container
-ENV HOME=/home/container
+CMD ["/bin/bash"]
